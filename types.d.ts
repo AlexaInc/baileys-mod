@@ -60,6 +60,7 @@ export interface WAProto {
 }
 
 export const proto: WAProto
+export const WAProto: WAProto
 
 /* ------------------------------------------------------------------ */
 /*  Core message / chat / contact types                                */
@@ -1242,3 +1243,239 @@ export type Long = {
     toString(): string
     [k: string]: any
 }
+
+/* ------------------------------------------------------------------ */
+/*  Re-exported secondary API (utils, constants, protocols)            */
+/*  Typed permissively so every package export is importable & callable.*/
+/* ------------------------------------------------------------------ */
+
+export const Browsers: { [key: string]: any }
+export const BufferJSON: { [key: string]: any }
+export const CALL_VIDEO_PREFIX: string
+export const Curve: { [key: string]: any }
+export const DECRYPTION_RETRY_CONFIG: { [key: string]: any }
+export const DEFAULT_ORIGIN: string
+export const DEF_CALLBACK_PREFIX: string
+export const DEF_TAG_PREFIX: string
+export const DICT_VERSION: number
+export const FLAG_BYTE: number
+export const FLAG_EVENT: number
+export const FLAG_FIELD: number
+export const FLAG_GLOBAL: number
+export const INITIAL_PREKEY_COUNT: number
+export function Itsuki(): any
+export const KEY_BUNDLE_TYPE: Buffer
+export const MEDIA_KEYS: any
+export const MEDIA_PATH_MAP: { [key: string]: any }
+export const META_AI_JID: string
+export const MIN_PREKEY_COUNT: number
+export const MIN_UPLOAD_INTERVAL: number
+export const MISSING_KEYS_ERROR_TEXT: string
+export const MexOperations: { [key: string]: any }
+export const MexUpdatesOperations: { [key: string]: any }
+export const NACK_REASONS: { [key: string]: any }
+export const NOISE_MODE: string
+export const NOISE_WA_HEADER: Buffer
+export const OFFICIAL_BIZ_JID: string
+export const PHONENUMBER_MCC: any
+export const PHONE_CONNECTION_CB: string
+export const PSA_WID: string
+export const SERVER_JID: string
+export const STORIES_JID: string
+export const S_WHATSAPP_NET: string
+export const Status: any
+export const StubType: any
+export const UNAUTHORIZED_CODES: any[]
+export const UPLOAD_TIMEOUT: number
+export const URL_REGEX: any
+export const WAJIDDomains: { [key: string]: any }
+export const WA_ADV_ACCOUNT_SIG_PREFIX: Buffer
+export const WA_ADV_DEVICE_SIG_PREFIX: Buffer
+export const WA_ADV_HOSTED_ACCOUNT_SIG_PREFIX: Buffer
+export const WA_ADV_HOSTED_DEVICE_SIG_PREFIX: Buffer
+export const WA_CERT_DETAILS: { [key: string]: any }
+export const WA_DEFAULT_EPHEMERAL: number
+export const WEB_EVENTS: any[]
+export const WEB_GLOBALS: any[]
+export function addTransactionCapability(state: any, logger: any, maxCommitRetries: any, delayBetweenTriesMs: any): any
+export function aesDecrypt(buffer: any, key: any): any
+export function aesDecryptCTR(ciphertext: any, key: any, iv: any): any
+export function aesDecryptGCM(ciphertext: any, key: any, iv: any, additionalData: any): any
+export function aesDecryptWithIV(buffer: any, key: any, IV: any): any
+export function aesEncrypWithIV(buffer: any, key: any, IV: any): any
+export function aesEncrypt(buffer: any, key: any): any
+export function aesEncryptCTR(plaintext: any, key: any, iv: any): any
+export function aesEncryptGCM(plaintext: any, key: any, iv: any, additionalData: any): any
+export function aggregateMessageKeysNotFromMe(keys: any): any
+export function areJidsSameUser(jid1: any, jid2: any): any
+export function asciiEncode(text: any): any
+export function bindWaitForConnectionUpdate(ev: any): any
+export function bindWaitForEvent(ev: any, event: any): any
+export function buildBinding(username: any, integrityKey: any): any
+export function bytesToCrockford(buffer: any): any
+export function callKdf(callKey: any, label: any, len: any): any
+export function chatModificationToAppPatch(mod: any, jid: any): any
+export function cleanMessage(message: any, meId: any, meLid: any): any
+export function configureSuccessfulPairing(stanza: any, advSecretKey: any, signedIdentityKey: any, signalIdentities: any): any
+export function createSignalIdentity(wid: any, accountSignatureKey: any): any
+export function debouncedTimeout(intervalMs: any, task: any): any
+export function decodeDecompressedBinaryNode(buffer: any, opts: any, indexRef: any): any
+export function decodeMediaRetryNode(node: any): any
+export function decodeMessageNode(stanza: any, meId: any, meLid: any): any
+export function decodePatches(name: any, syncds: any, initial: any, getAppStateSyncKey: any, options: any, minimumVersionNumber: any, logger: any, validateMacs: any): any
+export function decodeSyncdMutations(msgMutations: any, initialState: any, getAppStateSyncKey: any, onMutation: any, validateMacs: any): any
+export function decodeSyncdPatch(msg: any, name: any, initialState: any, getAppStateSyncKey: any, onMutation: any, validateMacs: any): any
+export function decodeSyncdSnapshot(name: any, snapshot: any, getAppStateSyncKey: any, minimumVersionNumber: any, validateMacs: any): any
+export function decompressingIfRequired(buffer: any): any
+export function decryptComment(encPayload: any, encIv: any, commentCreatorJid: any, commentMsgId: any, commentEncKey: any, commentJid: any): any
+export function decryptEventEdit(encPayload: any, encIv: any, eventCreatorJid: any, eventMsgId: any, eventEncKey: any, responderJid: any): any
+export function decryptEventResponse(encPayload: any, encIv: any, eventCreatorJid: any, eventMsgId: any, eventEncKey: any, responderJid: any): any
+export function decryptMediaRetryData(ciphertext: any, iv: any, mediaKey: any, msgId: any): any
+export function decryptMessageNode(stanza: any, meId: any, meLid: any, repository: any, logger: any): any
+export function decryptPollVote(encPayload: any, encIv: any, pollCreatorJid: any, pollMsgId: any, pollEncKey: any, voterJid: any): any
+export function decryptReaction(encPayload: any, encIv: any, reactionCreatorJid: any, reactionMsgId: any, reactionEncKey: any, reactionJid: any): any
+export function delay(ms: any): any
+export function delayCancellable(ms: any): any
+export function downloadAndProcessHistorySyncNotification(msg: any, options: any): any
+export function downloadContentFromMessage(mediaKey: any, directPath: any, url: any, type: any, opts: any): any
+export function downloadEncryptedContent(downloadUrl: any, cipherKey: any, iv: any, startByte: any, endByte: any, options: any): any
+export function downloadExternalBlob(blob: any, options: any): any
+export function downloadExternalPatch(blob: any, options: any): any
+export function downloadHistory(msg: any, options: any): any
+export function encodeBase64EncodedStringForUpload(b64: any): any
+export function encodeBigEndian(e: any, t: any): any
+export function encodeNewsletterMessage(message: any): any
+export function encodeSyncdPatch(type: any, index: any, syncAction: any, apiVersion: any, operation: any, myAppStateKeyId: any, state: any, getAppStateSyncKey: any): any
+export function encodeWAMessage(message: any): any
+export function encryptMediaRetryRequest(key: any, mediaKey: any, meId: any): any
+export function encryptedStream(media: any, mediaType: any, logger: any, saveOriginalFileIfRequired: any, opts: any): any
+export function extensionForMediaMessage(message: any): any
+export function extractAddressingContext(stanza: any): any
+export function extractCandidates(offerNode: any): any
+export function extractDeviceJids(result: any, myJid: any, myLid: any, excludeZeroDevices: any): any
+export function extractImageThumb(bufferOrFilePath: any, width: any, quality: any): any
+export function extractMessageContent(content: any): any
+export function extractSyncdPatches(result: any, options: any): any
+export function extractUrlFromText(text: any): any
+export function extractVideoThumb(path: any, destPath: any, time: any, size: any): any
+export function fetchLatestWaWebVersion(options: any): any
+export function fromUnicodeEscape(escapedText: any): any
+export function generateForwardMessageContent(message: any, forceForward: any): any
+export function generateLinkPreviewIfRequired(text: any, getUrlInfo: any, logger: any): any
+export function generateLoginNode(userJid: any, config: any): any
+export function generateMdTagPrefix(): any
+export function generateOrGetPreKeys(creds: any, range: any): any
+export function generateParticipantHashV2(participants: any): any
+export function generateProfilePicture(mediaUpload: any, dimensions: any): any
+export function generateRegistrationId(): any
+export function generateRegistrationNode(registrationId: any, signedPreKey: any, signedIdentityKey: any, config: any): any
+export function generateSignalPubKey(pubKey: any): any
+export function generateThumbnail(file: any, mediaType: any, options: any): any
+export function generateWAMessage(jid: any, content: any, options: any): any
+export function generateWAMessageContent(message: any, options: any): any
+export function generateWAMessageFromContent(jid: any, message: any, options: any): any
+export function getAggregateResponsesInEventMessage(eventResponses: any, meLid: any): any
+export function getAggregateVotesInPollMessage(message: any, pollUpdates: any, meId: any): any
+export function getAudioDuration(buffer: any): any
+export function getAudioWaveform(buffer: any, logger: any): any
+export function getBinaryFilteredBizBot(nodeContent: any): any
+export function getBinaryFilteredButtons(nodeContent: any): any
+export function getBinaryNodeChildUInt(node: any, childTag: any, length: any): any
+export function getBinaryNodeMessages(content: any): any
+export function getCallStatusFromNode(tag: any, attrs: any): any
+export function getChatId(remoteJid: any, participant: any, fromMe: any): any
+export function getCodeFromWSError(error: any): any
+export function getDevice(id: any): any
+export function getErrorCodeFromStreamError(node: any): any
+export function getHttpStream(url: any, options: any): any
+export function getKeyAuthor(key: any, meId: any): any
+export function getMediaKeys(buffer: any, mediaType: any): any
+export function getMediaRetryKey(mediaKey: any): any
+export function getNextPreKeys(creds: any, keys: any, count: any): any
+export function getPreKeys(get: any, min: any, limit: any): any
+export function getRawMediaUploadData(media: any, mediaType: any, logger: any): any
+export function getStatusCodeForMediaRetry(code: any): any
+export function getStatusFromReceiptType(type: any): any
+export function getStream(item: any, opts: any): any
+export function getUrlFromDirectPath(directPath: any): any
+export function getWAUploadToServer(customUploadHosts: any, fetchAgent: any, logger: any, options: any, refreshMediaConn: any): any
+export function hasNonNullishProperty(message: any, key: any): any
+export function hkdf(buffer: any, expandedLength: any, info: any): any
+export function hkdfInfoKey(type: any): any
+export function hmacSign(buffer: any, key: any, variant: any): any
+export function isHostedLidUser(jid: any): any
+export function isHostedPnUser(jid: any): any
+export function isRealMessage(message: any): any
+export function isWABusinessPlatform(platform: any): any
+export function md5(buffer: any): any
+export function mediaMessageSHA256B64(message: any): any
+export function mutationKeys(keydata: any): any
+export function newLTHashState(): any
+export function parseAndInjectE2ESessions(node: any, repository: any): any
+export function parseStun(buf: any): any
+export function prepareAlbumMessageContent(jid: any, albums: any, options: any): any
+export function prepareDisappearingMessageSettingContent(expiration: any): any
+export function prepareStream(media: any, mediaType: any, logger: any, saveOriginalFileIfRequired: any, opts: any): any
+export function prepareWAMessageMedia(message: any, options: any): any
+export function printQRIfNecessaryListener(ev: any, logger: any): any
+export function processHistoryMessage(item: any): any
+export function promiseTimeout(ms: any, promise: any): any
+export function reduceBinaryNodeToDictionary(node: any, tag: any): any
+export function resolveVideoPreset(name: any): any
+export function sha256(buffer: any): any
+export function shouldIncrementChatUnread(message: any): any
+export function signedKeyPair(identityKeyPair: any, keyId: any): any
+export function toNumber(t: any): any
+export function toReadable(buffer: any): any
+export function toUnicodeEscape(text: any): any
+export function transferDevice(fromJid: any, toJid: any): any
+export function trimUndefined(obj: any): any
+export function unixTimestampSeconds(date: any): any
+export function unpadRandomMax16(e: any): any
+export function updateMessageWithEventResponse(msg: any, update: any): any
+export function updateMessageWithPollUpdate(msg: any, update: any): any
+export function updateMessageWithReaction(msg: any, reaction: any): any
+export function updateMessageWithReceipt(msg: any, receipt: any): any
+export function uploadWithNodeHttp(url: any, filePath: any, headers: any, timeoutMs: any, agent: any, redirectCount: any): any
+export function waChatKey(pin: any): any
+export const waLabelAssociationKey: { [key: string]: any }
+export function waMessageID(m: any): any
+export function writeRandomPadMax16(msg: any): any
+export function xmppPreKey(pair: any, id: any): any
+export function xmppSignedPreKey(key: any): any
+
+/* ------------------------------------------------------------------ */
+/*  Re-exported secondary API (utils, constants, protocols)            */
+/*  Typed permissively so every package export is importable & callable.*/
+/* ------------------------------------------------------------------ */
+
+export const CALL_AUDIO_PREFIX: string
+export const DEFAULT_CACHE_TTLS: { [key: string]: any }
+export const DEFAULT_CONNECTION_CONFIG: { [key: string]: any }
+export const FLAG_EXTENDED: number
+export const LT_HASH_ANTI_TAMPERING: any
+export const MEDIA_HKDF_KEY_MAPPING: { [key: string]: any }
+export const MEDIA_RETRY_STATUS_MAP: { [key: string]: any }
+export class MessageRetryManager { constructor(...args: any[]); [key: string]: any }
+export const NO_MESSAGE_FOUND_ERROR_TEXT: string
+export class ObjectRepository { constructor(...args: any[]); [key: string]: any }
+export const PROCESSABLE_HISTORY_TYPES: any[]
+export const XWAPathsMexUpdates: { [key: string]: any }
+export function asciiDecode(codes: any): any
+export function assertMediaContent(content: any): any
+export function binaryNodeToString(node: any, i: any): any
+export function derivePairingCodeKey(pairingCode: any, salt: any): any
+export function encodeSignedDeviceIdentity(account: any, includeSignatureKey: any): any
+export function encodeWAM(binaryInfo: any): any
+export function getHistoryMsg(message: any): any
+export function getNextPreKeysNode(state: any, count: any): any
+export function getPlatformId(browser: any): any
+export function getServerFromDomainType(initialServer: any, domainType: any): any
+export function getUrlInfo(text: any, opts: any, fetchOpts: any): any
+export function initAuthCreds(): any
+export function makeCacheManagerAuthState(store: any, sessionKey: any): any
+export function makeEventBuffer(logger: any): any
+export function makeNoiseHandler(keyPair: any, public: any, NOISE_HEADER: any, logger: any, routingInfo: any): any
+export function makeOrderedDictionary(idGetter: any): any
+export function processMessage(message: any, shouldProcessHistoryMsg: any, placeholderResendCache: any, ev: any, creds: any, signalRepository: any, keyStore: any, logger: any, options: any, getMessage: any): any
+export function processSyncAction(syncAction: any, ev: any, me: any, initialSyncOpts: any, logger: any): any
