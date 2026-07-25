@@ -21,9 +21,11 @@
   "author": "hansaka@alexainc",
 
   "main": "lib/index.js",
+  "types": "types.d.ts",
   "files": [
     "lib/*",
     "WAProto/*",
+    "types.d.ts",
     "engine-requirements.js"
   ],
 
