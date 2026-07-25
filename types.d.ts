@@ -680,6 +680,50 @@ export type USyncQueryResult = USyncQuery & {
     [k: string]: any
 }
 
+/* [MOD] USync protocol helpers */
+export class USyncBotProfileProtocol {
+    constructor()
+    name?: string
+    getQueryElement(): any
+    getUserElement(user: any): any
+    parser(node: any): any
+}
+export class USyncContactProtocol {
+    constructor()
+    name?: string
+    getQueryElement(): any
+    getUserElement(user: any): any
+    parser(node: any): any
+}
+export class USyncDeviceProtocol {
+    constructor()
+    name?: string
+    getQueryElement(): any
+    getUserElement(user: any): any
+    parser(node: any): any
+}
+export class USyncDisappearingModeProtocol {
+    constructor()
+    name?: string
+    getQueryElement(): any
+    getUserElement(user: any): any
+    parser(node: any): any
+}
+export class USyncLIDProtocol {
+    constructor()
+    name?: string
+    getQueryElement(): any
+    getUserElement(user: any): any
+    parser(node: any): any
+}
+export class USyncStatusProtocol {
+    constructor()
+    name?: string
+    getQueryElement(): any
+    getUserElement(user: any): any
+    parser(node: any): any
+}
+
 /* ------------------------------------------------------------------ */
 /*  WAM buffer (lib/WAM/BinaryInfo)                                     */
 /* ------------------------------------------------------------------ */
