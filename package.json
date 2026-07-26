@@ -23,6 +23,7 @@
   "main": "lib/index.js",
   "types": "types.d.ts",
   "files": [
+    "types.d.ts",
     "lib/*",
     "WAProto/*",
     "engine-requirements.js"
@@ -36,7 +37,9 @@
     "lint:fix": "yarn lint --fix",
     "preinstall": "node ./engine-requirements.js",
     "release": "release-it",
-    "test": "jest"
+    "test": "jest",
+    "verify:types": "./verify_all.sh",
+    "test:types": "tsc --noEmit --strict types.d.ts"
   },
 
   "dependencies": {
