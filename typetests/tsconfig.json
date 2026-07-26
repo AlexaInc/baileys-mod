@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "paths": { "@alexainc/baileys-mod": ["../types.d.ts"] },
+    "baseUrl": "."
+  },
+  "include": ["*.ts"]
+}
