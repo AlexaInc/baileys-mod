@@ -23,6 +23,7 @@
   "main": "lib/index.js",
   "types": "types.d.ts",
   "files": [
+    "types.d.ts",
     "lib/*",
     "WAProto/*",
     "engine-requirements.js"

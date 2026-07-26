@@ -15,7 +15,6 @@
 
 import type { EventEmitter } from 'events'
 import type { Socket as DgramSocket } from 'dgram'
-import type { WebSocket } from 'ws'
 import type { Readable, Transform } from 'stream'
 import type { Boom } from '@hapi/boom'
 import type { Agent } from 'http'
@@ -23,6 +22,22 @@ import type { Agent } from 'http'
 /* ------------------------------------------------------------------ */
 /*  Low-level binary node / JID types (lib/WABinary)                   */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Minimal structural description of the underlying WebSocket.
+ * Declared structurally so consumers are NOT required to install `@types/ws`
+ * (this package only lists it as a devDependency). A `ws` WebSocket, and the
+ * browser WebSocket, both satisfy this.
+ */
+export interface WASocketLike {
+    readyState: number
+    close(code?: number, data?: string | Buffer): void
+    send(data: any, cb?: (err?: Error) => void): void
+    on(event: string, listener: (...args: any[]) => void): this
+    off?(event: string, listener: (...args: any[]) => void): this
+    removeAllListeners(event?: string): this
+    [k: string]: any
+}
 
 export type BinaryNodeAttributes = { [key: string]: string }
 
@@ -470,7 +485,7 @@ export interface ConnectionState {
     isReconnecting?: boolean
     pairingCode?: string
     pairingPhoneUsed?: string
-    ws?: WebSocket
+    ws?: WASocketLike
 }
 
 export type WAPresence = 'unavailable' | 'available' | 'composing' | 'recording' | 'paused'
@@ -922,7 +937,7 @@ export class BinaryInfo {
 export interface WASocket {
     /* transport / connection */
     type: 'md'
-    ws: WebSocket
+    ws: WASocketLike
     ev: BaileysEventEmitter
     authState: AuthenticationState
     /** run a WhatsApp MEX (GraphQL) query and return the node at `dataPath` */
@@ -2383,8 +2398,27 @@ export const WA_CERT_DETAILS: {
     SERIAL: number;
 };
 export const WA_DEFAULT_EPHEMERAL: number
-export const WEB_EVENTS: Event[];
-export const WEB_GLOBALS: Global[];
+/** WAM event descriptors used when encoding web attributes. */
+export interface WAMEvent {
+    name: string
+    id: number
+    props: { [prop: string]: [number, string] }
+    wamChannel: string
+    weight: number
+    [k: string]: any
+}
+
+export const WEB_EVENTS: WAMEvent[]
+/** WAM "global" attribute descriptors used when encoding web attributes. */
+export interface WAMGlobal {
+    name: string
+    id: number
+    type: string | { [k: string]: number }
+    channels: string[]
+    [k: string]: any
+}
+
+export const WEB_GLOBALS: WAMGlobal[]
 export const addTransactionCapability: (state: SignalKeyStore, logger: ILogger, opts?: TransactionCapabilityOptions) => SignalKeyStoreWithTransaction;
 export function aesDecrypt(buffer: Uint8Array, key: Uint8Array): Buffer;
 export function aesDecryptCTR(ciphertext: Uint8Array, key: Uint8Array, iv: Uint8Array): Buffer;

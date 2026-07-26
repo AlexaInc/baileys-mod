@@ -18,3 +18,7 @@ console.log('[4] export parity:                declared '+all.length+' / runtime
 "
 echo "[5] runtime assertions:           $(node typetests/runtime/assert.cjs 2>/dev/null | grep -c PASS) passed / $(node typetests/runtime/assert.cjs 2>/dev/null | grep -c FAIL) failed"
 echo "[6] lib/ source modified:         $(git status --porcelain -- lib WAProto | wc -l) files"
+echo "[7] types.d.ts shipped in pkg:     $(npm pack --dry-run --json 2>/dev/null | node -e "
+let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{
+  const f=JSON.parse(d)[0].files.map(x=>x.path);
+  console.log(f.includes('types.d.ts')?'yes':'NO');});")"
