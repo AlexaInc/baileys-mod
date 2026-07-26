@@ -16,5 +16,5 @@ const rt=Object.keys(b).filter(k=>k!=='default');
 console.log('[4] export parity:                declared '+all.length+' / runtime '+rt.length+
   ' | ghosts '+all.filter(n=>!(n in b)).length+' | untyped '+rt.filter(n=>!all.includes(n)).length);
 "
-echo "[5] runtime assertions:           $(node runtime_assert.cjs 2>/dev/null | grep -c PASS) passed / $(node runtime_assert.cjs 2>/dev/null | grep -c FAIL) failed"
+echo "[5] runtime assertions:           $(node typetests/runtime/assert.cjs 2>/dev/null | grep -c PASS) passed / $(node typetests/runtime/assert.cjs 2>/dev/null | grep -c FAIL) failed"
 echo "[6] lib/ source modified:         $(git status --porcelain -- lib WAProto | wc -l) files"

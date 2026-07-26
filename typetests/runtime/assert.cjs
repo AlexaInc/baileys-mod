@@ -1,4 +1,4 @@
-const b=require('/home/user/baileys-mod/lib')
+const b=require('../../lib')
 const B=Buffer.isBuffer
 const t=[]
 const chk=(n,f,p)=>{try{const v=f();t.push((p(v)?'PASS':'FAIL')+' '+n)}catch(e){t.push('FAIL '+n+' threw '+e.message.slice(0,40))}}

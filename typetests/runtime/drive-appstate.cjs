@@ -3,8 +3,8 @@
  * call nodes, group metadata parsing and the event buffer — i.e. the
  * paths that only run against a live server.
  */
-const P = require('./lib')
-const pino = require('pino')
+const P = require('../../lib')
+const pino = require('../../node_modules/pino')
 const { proto } = P
 const logger = pino({ level: 'silent' })
 const EventEmitter = require('events')

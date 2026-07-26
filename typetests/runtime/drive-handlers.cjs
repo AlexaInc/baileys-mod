@@ -7,8 +7,8 @@
  * contact sync, chat mutations, receipts, calls, group metadata) without
  * needing WhatsApp's TLS endpoint.
  */
-const P = require('./lib')
-const pino = require('pino')
+const P = require('../../lib')
+const pino = require('../../node_modules/pino')
 const { proto } = P
 const logger = pino({ level: 'silent' })
 
@@ -130,7 +130,7 @@ const check = (name, obj, expectKeys) => {
         console.log('  ' + j.padEnd(22) + ' decode=' + JSON.stringify(d) + ' group=' + P.isJidGroup(j) + ' lid=' + P.isLidUser(j))
     }
 
-    require('fs').writeFileSync('/home/user/baileys-mod/.livetest/proto_out.json', JSON.stringify(results, null, 1))
+    require('fs').writeFileSync('/tmp/proto_out.json', JSON.stringify(results, null, 1))
     console.log('\nDONE')
     process.exit(0)
 })().catch(e => { console.error('FATAL', e); process.exit(1) })

@@ -1,12 +1,12 @@
-const P = require('/home/user/baileys-mod/lib')
-const pino = require('/home/user/baileys-mod/node_modules/pino')
+const P = require('../../lib')
+const pino = require('../../node_modules/pino')
 const fs = require('fs')
 
 const log = []
 const rec = (...a) => { const s = a.map(x=>typeof x==='string'?x:JSON.stringify(x)).join(' '); console.log(s); log.push(s) }
 
 ;(async () => {
-  const { state, saveCreds } = await P.useMultiFileAuthState('/home/user/baileys-mod/.livetest/auth')
+  const { state, saveCreds } = await P.useMultiFileAuthState('/tmp/wa_live_auth')
   const { version, isLatest } = await P.fetchLatestBaileysVersion().catch(e => ({version:[2,3000,1030000000],isLatest:false,error:e.message}))
   rec('WA version:', JSON.stringify(version), 'isLatest:', String(isLatest))
 
@@ -42,7 +42,7 @@ const rec = (...a) => { const s = a.map(x=>typeof x==='string'?x:JSON.stringify(
   setTimeout(() => {
     rec('--- ws readyState=' + (sock.ws && sock.ws.readyState))
     rec('--- user=' + JSON.stringify(sock.user))
-    fs.writeFileSync('/home/user/baileys-mod/.livetest/out.txt', log.join('\n'))
+    fs.writeFileSync('/tmp/wa_live_out.txt', log.join('\n'))
     process.exit(0)
   }, 30000)
-})().catch(e => { rec('FATAL ' + e.message); fs.writeFileSync('/home/user/baileys-mod/.livetest/out.txt', log.join('\n')); process.exit(1) })
+})().catch(e => { rec('FATAL ' + e.message); fs.writeFileSync('/tmp/wa_live_out.txt', log.join('\n')); process.exit(1) })
