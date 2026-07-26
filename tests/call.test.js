@@ -23,7 +23,11 @@ const {
     extractRelayToken,
     decodeEndpoint,
     OggOpusDemuxer,
-    parseStun
+    parseStun,
+    callKdf,
+    CALL_KDF_LABELS,
+    srtpDeriveSessionKey,
+    srtpIv
 } = require('../lib/Utils/call-media')
 const { getCallStatusFromNode } = require('../lib/Utils/generics')
 
@@ -356,7 +360,7 @@ describe('media transport', () => {
         session.close()
     })
 
-    test('RTP packets are well-formed, SRTP-encrypted and reach the peer', async () => {
+    test('RTP packets are well-formed, SRTP-protected and reach the peer', async () => {
         const relay = await mockRelay()
         const session = new WACallMediaSession({
             callId: CALL_ID,
@@ -369,20 +373,33 @@ describe('media transport', () => {
 
             const frame = Buffer.from('an-opus-frame-payload')
             const seq = session.seq & 0xffff
+            const ssrc = session.ssrc
             const pkt = session._packetize(frame, 'audio', 960)
 
             expect(pkt[0]).toBe(0x80)              // RTP v2
             expect(pkt[1] & 0x7f).toBe(111)        // Opus payload type
             expect(pkt.readUInt16BE(2)).toBe(seq)
-            expect(pkt.subarray(12).equals(frame)).toBe(false) // encrypted
 
-            // and it decrypts back with the key derived from the call key
-            const iv = Buffer.alloc(16)
-            session.srtpSalt.copy(iv, 0, 0, 14)
-            iv.writeUInt16BE(seq, 14)
-            const d = crypto.createDecipheriv('aes-128-ctr', session.srtpKey, iv)
-            const back = Buffer.concat([d.update(pkt.subarray(12)), d.final()])
+            // 12-byte header + ciphertext + 10-byte HMAC-SHA1-80 auth tag
+            expect(pkt.length).toBe(12 + frame.length + 10)
+
+            const body = pkt.subarray(12, pkt.length - 10)
+            const tag = pkt.subarray(pkt.length - 10)
+            expect(body.equals(frame)).toBe(false) // encrypted
+
+            // decrypt exactly as an SRTP peer would: derive session keys from
+            // the master key/salt, build the RFC 3711 IV, then verify the tag.
+            const sk = srtpDeriveSessionKey(session.srtpKey, session.srtpSalt, 0x00, 16)
+            const ak = srtpDeriveSessionKey(session.srtpKey, session.srtpSalt, 0x01, 20)
+            const ss = srtpDeriveSessionKey(session.srtpKey, session.srtpSalt, 0x02, 14)
+            const d = crypto.createDecipheriv('aes-128-ctr', sk, srtpIv(ss, ssrc, seq))
+            const back = Buffer.concat([d.update(body), d.final()])
             expect(back.equals(frame)).toBe(true)
+
+            const expectTag = crypto.createHmac('sha1', ak)
+                .update(pkt.subarray(0, 12)).update(body).update(Buffer.alloc(4))
+                .digest().subarray(0, 10)
+            expect(tag.equals(expectTag)).toBe(true)
 
             session._send(pkt)
             await settle(300)
@@ -402,6 +419,88 @@ describe('media transport', () => {
         expect(a.readUInt32BE(8)).not.toBe(v.readUInt32BE(8))
         expect(v[1] & 0x7f).toBe(96) // VP8
         s.close()
+    })
+})
+
+describe('call crypto (recovered from WhatsApp Web VoIP WASM)', () => {
+    test('uses the real hop-by-hop derivation labels', () => {
+        // These strings sit next to `derive_hbh_srtp_key` in whatsapp.wasm.
+        expect(CALL_KDF_LABELS).toMatchObject({
+            SRTP_KEY: 'hbh srtp key',
+            SRTP_SALT: 'hbh srtp salt',
+            SRTCP_UPLINK_KEY: 'uplink hbh srtcp key',
+            SRTCP_UPLINK_SALT: 'uplink hbh srtcp salt',
+            SRTCP_DOWNLINK_KEY: 'downlink hbh srtcp key',
+            SRTCP_DOWNLINK_SALT: 'downlink hbh srtcp salt',
+            WARP_AUTH_KEY: 'warp auth key',
+            E2E_SFRAME_KEY: 'e2e sframe key'
+        })
+    })
+
+    test('callKdf is HKDF-SHA256 (RFC 5869 test vectors)', () => {
+        // TC1
+        expect(callKdf(
+            Buffer.alloc(22, 0x0b),
+            Buffer.from('f0f1f2f3f4f5f6f7f8f9', 'hex'),
+            42,
+            Buffer.from('000102030405060708090a0b0c', 'hex')
+        ).toString('hex')).toBe(
+            '3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf' +
+            '34007208d5b887185865'
+        )
+        // TC3 (empty salt and info)
+        expect(callKdf(Buffer.alloc(22, 0x0b), Buffer.alloc(0), 42, null).toString('hex')).toBe(
+            '8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d' +
+            '9d201395faa4b61a96c8'
+        )
+    })
+
+    test('SRTP session-key derivation matches RFC 3711 §B.3', () => {
+        const mk = Buffer.from('E1F97A0D3E018BE0D64FA32C06DE4139', 'hex')
+        const ms = Buffer.from('0EC675AD498AFEEBB6960B3AABE6', 'hex')
+        expect(srtpDeriveSessionKey(mk, ms, 0x00, 16).toString('hex').toUpperCase())
+            .toBe('C61E7A93744F39EE10734AFE3FF7A087')
+        expect(srtpDeriveSessionKey(mk, ms, 0x01, 20).toString('hex').toUpperCase())
+            .toBe('CEBE321F6FF7716B6FD4AB49AF256A156D38BAA4')
+        expect(srtpDeriveSessionKey(mk, ms, 0x02, 14).toString('hex').toUpperCase())
+            .toBe('30CBBC08863D8C85D49DB34A9AE1')
+    })
+
+    test('session derives distinct SRTP / SRTCP material of the right sizes', () => {
+        const s = new WACallMediaSession({
+            callId: CALL_ID, callKey: REAL_KEY, candidates: [], logger: silentLogger
+        })
+        expect(s.srtpKey).toHaveLength(16)
+        expect(s.srtpSalt).toHaveLength(14)
+        expect(s.srtcpTxKey).toHaveLength(16)
+        expect(s.srtcpRxKey).toHaveLength(16)
+        // uplink and downlink must not collide
+        expect(s.srtcpTxKey.equals(s.srtcpRxKey)).toBe(false)
+        expect(s.srtpKey.equals(s.srtcpTxKey)).toBe(false)
+        s.close()
+    })
+
+    test('the packet index rolls over into the ROC on sequence wrap', () => {
+        const s = new WACallMediaSession({
+            callId: CALL_ID, callKey: REAL_KEY, candidates: [], logger: silentLogger
+        })
+        s.seq = 0xfffe
+        s._packetize(Buffer.alloc(4), 'audio', 960) // 0xfffe
+        s._packetize(Buffer.alloc(4), 'audio', 960) // 0xffff
+        expect(s._srtpState(false).roc).toBe(0)
+        s._packetize(Buffer.alloc(4), 'audio', 960) // wraps to 0x0000
+        expect(s._srtpState(false).roc).toBe(1)
+        s.close()
+    })
+
+    test('IV construction folds in SSRC and packet index (RFC 3711 §4.1.1)', () => {
+        const salt = Buffer.alloc(14, 0)
+        const a = srtpIv(salt, 0x12345678, 0)
+        expect(a.subarray(4, 8).toString('hex')).toBe('12345678')
+        // same ssrc, different index -> different IV
+        expect(srtpIv(salt, 0x12345678, 1).equals(a)).toBe(false)
+        // last two bytes are the AES-CM block counter, always zero
+        expect(a.subarray(14).toString('hex')).toBe('0000')
     })
 })
 

@@ -210,7 +210,7 @@ pump) is implemented and unit-tested over loopback.
 
 ### What is verified, and what still isn't
 
-**Verified** (covered by `tests/call.test.js`, 17 tests):
+**Verified** (covered by `tests/call.test.js`, 23 tests):
 
 - signaling: `<preaccept>` → `<accept>` stanza shape, LID/PN self-addressing,
   acking malformed call nodes;
@@ -218,20 +218,41 @@ pump) is implemented and unit-tested over loopback.
   `proto.Message.call.callKey`) and returned by `acceptCall`;
 - candidate parsing against **real captured** `te2`/`rte` payloads;
 - ICE binding + retransmission and RTP delivery against a mock relay over
-  loopback, including SRTP round-trip;
+  loopback;
+- the media KDF and SRTP layer against **official RFC test vectors**
+  (RFC 5869 HKDF TC1/TC3, RFC 3711 §B.3 session-key derivation);
 - the Ogg→Opus demuxer yields byte-exact frames.
 
-> **Still unverified — the SRTP KDF.** The derivation labels in `callKdf()`
-> (`"WhatsApp Call SRTP"` / `"Call Salt"` / `"Call ICE"`) are **educated
-> guesses**, not recovered from WhatsApp's client. Everything up to and
-> including "packets reach the peer" is confirmed, but a real WhatsApp endpoint
-> will not be able to *decode* our audio until those labels match theirs. That
-> requires reading the derivation out of WhatsApp's own VoIP code.
->
-> If you need guaranteed-correct media today, the only known-working approach is
-> to drive WhatsApp Web's official VoIP WASM stack in-process (as
-> [`baileys-caller`](https://github.com/SheIITear/baileys-caller) does) instead
-> of reimplementing SRTP.
+### Where the crypto comes from
+
+The derivation is **not guessed** — it was recovered from WhatsApp Web's VoIP
+WASM binary (`whatsapp.wasm`, ~9.4 MB, shipped by
+[`baileys-caller`](https://github.com/SheIITear/baileys-caller)):
+
+- the labels are a contiguous block of null-terminated C strings sitting beside
+  the `derive_hbh_srtp_key` symbol: `hbh srtp key`, `hbh srtp salt`,
+  `uplink/downlink hbh srtcp key|salt`, `warp auth key|salt`, `e2e sframe key`;
+- the KDF is **HKDF-SHA256**, not a bare HMAC. The binary imports
+  `hkdf_extract_and_expand_js`, whose JS side is
+  `cryptoHkdfExtractWithSaltAndExpand({ key_, salt_, info_, length })` →
+  `WACryptoHkdfSync.hkdf(key, salt, info, length)`. The **label is the `info`
+  parameter** and the call key is the input keying material;
+- the cipher suite is `AES_CM_128_HMAC_SHA1_80` (also present in the binary), so
+  each stream needs a 16-byte master key + 14-byte master salt, from which RFC
+  3711 §4.3.1 session keys (cipher / auth / salt) are derived, with a 10-byte
+  auth tag and a 48-bit ROC‖SEQ packet index.
+
+```js
+const { callKdf, CALL_KDF_LABELS } = require('@alexainc/baileys-mod')
+const srtpKey  = callKdf(callKey, CALL_KDF_LABELS.SRTP_KEY, 16)   // HKDF info
+const srtpSalt = callKdf(callKey, CALL_KDF_LABELS.SRTP_SALT, 14)
+```
+
+> **Remaining caveat:** the crypto primitives and labels are now confirmed
+> correct, and packets are well-formed SRTP. What has *not* been exercised is a
+> full handshake against live WhatsApp infrastructure — that needs a real
+> account and unfiltered UDP, neither of which exists in CI. Expect to iterate
+> on relay/`warp` binding details the first time you point this at production.
 
 ## Requirements
 

@@ -719,6 +719,19 @@ export class WACallMediaSession extends EventEmitter {
     /** relay auth token from the offer's `<relay><token>`, if any */
     relayToken: Buffer | null
 
+    /* derived media material (null when no call key is available) */
+    /** SRTP master key — HKDF(callKey, info='hbh srtp key'), 16 bytes */
+    srtpKey: Buffer | null
+    /** SRTP master salt — HKDF(callKey, info='hbh srtp salt'), 14 bytes */
+    srtpSalt: Buffer | null
+    srtcpTxKey: Buffer | null
+    srtcpTxSalt: Buffer | null
+    srtcpRxKey: Buffer | null
+    srtcpRxSalt: Buffer | null
+    /** relay/transport ("warp") auth material used for STUN MESSAGE-INTEGRITY */
+    iceKey: Buffer | null
+    iceSalt: Buffer | null
+
     constructor(opts: {
         callId: string
         callKey: Buffer | null
@@ -2489,7 +2502,44 @@ export function buildBinding(opts?: {
     integrityKey?: Uint8Array | Buffer
 }): { packet: Buffer; txId: Buffer }
 export function bytesToCrockford(buffer: Buffer): string;
-export function callKdf(callKey: Buffer, label: string, len?: number): Buffer
+/**
+ * HKDF-SHA256 (RFC 5869) key derivation for call media, with `label` used as
+ * the HKDF *info*. Matches WhatsApp's `cryptoHkdfExtractWithSaltAndExpand`.
+ * `salt` defaults to 32 zero bytes.
+ */
+export function callKdf(
+    callKey: Buffer,
+    label: string | Buffer,
+    len?: number,
+    salt?: Buffer | null
+): Buffer
+
+/**
+ * Hop-by-hop / end-to-end derivation labels recovered from WhatsApp Web's VoIP
+ * WASM binary (they sit beside the `derive_hbh_srtp_key` symbol).
+ */
+export const CALL_KDF_LABELS: {
+    SRTP_KEY: 'hbh srtp key'
+    SRTP_SALT: 'hbh srtp salt'
+    SRTCP_UPLINK_KEY: 'uplink hbh srtcp key'
+    SRTCP_UPLINK_SALT: 'uplink hbh srtcp salt'
+    SRTCP_DOWNLINK_KEY: 'downlink hbh srtcp key'
+    SRTCP_DOWNLINK_SALT: 'downlink hbh srtcp salt'
+    WARP_AUTH_KEY: 'warp auth key'
+    WARP_AUTH_SALT: 'warp auth salt'
+    E2E_SFRAME_KEY: 'e2e sframe key'
+}
+
+/** RFC 3711 §4.3.1 SRTP session-key derivation (label 0=cipher, 1=auth, 2=salt). */
+export function srtpDeriveSessionKey(
+    masterKey: Buffer,
+    masterSalt: Buffer,
+    label: number,
+    len: number
+): Buffer
+
+/** RFC 3711 §4.1.1 AES-CM initialization vector for a given SSRC + packet index. */
+export function srtpIv(sessionSalt: Buffer, ssrc: number, index: number): Buffer
 export const chatModificationToAppPatch: (mod: ChatModification, jid: string) => WAPatchCreate;
 export const cleanMessage: (message: WAMessage, meId: string, meLid: string) => void;
 export const configureSuccessfulPairing: (stanza: BinaryNode, { advSecretKey, signedIdentityKey, signalIdentities }: Pick<AuthenticationCreds, "advSecretKey" | "signedIdentityKey" | "signalIdentities">) => {
