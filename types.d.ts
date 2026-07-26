@@ -453,9 +453,13 @@ export type CacheStore = {
 export interface ConnectionState {
     connection?: 'open' | 'close' | 'connecting'
     lastDisconnect?: {
-        error: Error | undefined
+        /**
+         * Usually a `Boom` - read the reason via
+         * `lastDisconnect.error.output.statusCode` and compare with
+         * `DisconnectReason`.
+         */
+        error: (Error & { output?: { statusCode?: number; payload?: any } }) | undefined
         date: Date
-        output?: { statusCode?: number }
     }
     qr?: string
     isNewLogin?: boolean
