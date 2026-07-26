@@ -638,8 +638,17 @@ export interface CallCandidate {
     ip: string
     port: number
     type: string
+    /** 4 for IPv4, 6 for IPv6 */
+    family?: 4 | 6
     relayId?: string
     priority?: number
+}
+
+/** A decoded WhatsApp transport endpoint (packed 6-byte v4 / 18-byte v6). */
+export interface CallEndpoint {
+    ip: string
+    port: number
+    family: 4 | 6
 }
 
 export interface AudioQuality {
@@ -707,13 +716,22 @@ export class WACallMediaSession extends EventEmitter {
     selected: { ip: string; port: number } | null
     closed: boolean
 
+    /** relay auth token from the offer's `<relay><token>`, if any */
+    relayToken: Buffer | null
+
     constructor(opts: {
         callId: string
         callKey: Buffer | null
         candidates: CallCandidate[]
+        relayToken?: Buffer | null
         logger?: ILogger
     })
 
+    /**
+     * Run ICE connectivity checks (with retransmission) and resolve with the
+     * selected peer. Rejects if no candidate answers within `timeoutMs`
+     * (default 8000) or if the offer carried no candidates at all.
+     */
     connect(timeoutMs?: number): Promise<{ ip: string; port: number }>
 
     streamAudio(input: string, quality?: Partial<AudioQuality>): this
@@ -1136,8 +1154,29 @@ export interface WASocket {
     sendRetryRequest(node: BinaryNode, forceIncludeKeys?: boolean): Promise<void>
     offerCall(toJid: string, isVideo?: boolean): Promise<{ id: string; to: string }>
     rejectCall(callId: string, callFrom: string): Promise<void>
-    /** [MOD] signaling-level accept of an incoming call */
-    acceptCall(callId: string, callFrom: string): Promise<{ id: string; callKey: string }>
+    /**
+     * [MOD] answer an incoming call.
+     *
+     * Returns the call's REAL media key — the one the caller minted and shipped
+     * to us inside the offer's `<enc>` node. (Earlier versions generated a fresh
+     * random key here and returned that instead, which is why `callKey` was
+     * useless / appeared undefined downstream.) `callKey` is `null` when the
+     * offer was never seen or its `<enc>` could not be decrypted.
+     *
+     * Sends `<preaccept>` before `<accept>` by default, like a real client.
+     */
+    acceptCall(
+        callId: string,
+        callFrom: string,
+        opts?: { isVideo?: boolean; preaccept?: boolean }
+    ): Promise<{
+        id: string
+        callKey: Buffer | null
+        callKeyHex: string | null
+        isVideo: boolean
+    }>
+    /** [MOD] send `<preaccept>` ("I'm ringing") — real clients send this first */
+    preacceptCall(callId: string, callFrom: string, isVideo?: boolean): Promise<{ id: string }>
     /** [MOD] hang up / end / cancel a (incoming or outgoing) call */
     terminateCall(callId: string, callFrom: string, reason?: string): Promise<void>
     /** [MOD] decrypt the inbound media callKey from a call <offer> node */
@@ -1493,9 +1532,17 @@ export type WACallEvent = {
     isVideo?: boolean
     isGroup?: boolean
     groupJid?: string
+    /** caller's phone-number JID, when the call is addressed over LID */
+    callerPn?: string
+    /** caller's LID, when the call is addressed over a phone number */
+    callerLid?: string
     /** [MOD] raw <offer> binary node, present on 'offer' events */
     offerNode?: BinaryNode
-    /** [MOD] decrypted 32-byte call media key, present on 'offer' when derivable */
+    /**
+     * [MOD] decrypted 32-byte call media key.
+     * Present on 'offer' when derivable, and carried onto subsequent events
+     * ('ringing' / 'preaccept' / 'accept' / 'transport') for the same call.
+     */
     callKey?: Buffer
     /** [MOD] hex form of `callKey` */
     callKeyHex?: string
@@ -2556,6 +2603,21 @@ export const extractAddressingContext: (stanza: BinaryNode) => {
     recipientAlt: string | undefined;
 };
 export function extractCandidates(offerNode: BinaryNode): CallCandidate[]
+/** [MOD] pull the `<relay><token>` blob out of a call offer, if present */
+export function extractRelayToken(offerNode: BinaryNode): Buffer | undefined
+/**
+ * [MOD] decode a packed WhatsApp transport endpoint.
+ * 6 bytes => IPv4 + port, 18 bytes => IPv6 + port. Returns null otherwise.
+ */
+export function decodeEndpoint(buf: Buffer | Uint8Array | null | undefined): CallEndpoint | null
+/**
+ * [MOD] streaming Ogg demuxer that yields raw Opus packets, so every RTP
+ * payload is exactly one Opus frame. Drops OpusHead / OpusTags headers.
+ */
+export class OggOpusDemuxer {
+    constructor()
+    push(chunk: Buffer | Uint8Array): Buffer[]
+}
 export const extractDeviceJids: (result: USyncQueryResultList[], myJid: string, myLid: string, excludeZeroDevices: boolean) => FullJid[];
 export const extractImageThumb: (bufferOrFilePath: Readable | Buffer | string, width?: number) => Promise<{
     buffer: any;
