@@ -159,6 +159,11 @@ async function start() {
             logCall(call.status.toUpperCase(), call)
 
             if (call.status === 'offer') {
+                // WhatsApp retransmits offer stanzas — answer each call ONCE
+                if (pendingCalls.has(call.id) || activeCalls.has(call.id)) {
+                    console.log(`\n[SKIP] Duplicate offer for ${call.id} — already handled\n`)
+                    continue
+                }
                 pendingCalls.set(call.id, call)
 
                 if (AUTO_ANSWER) {
@@ -292,7 +297,9 @@ async function answerCall(sock, call) {
             // ICE failure is expected in NAT-heavy environments without real UDP
             console.log(`\n⚠️  ICE failed (${iceErr.message})`)
             console.log(`   This is normal without direct UDP access to WA relay servers.`)
-            console.log(`   Signaling (accept/preaccept) DID work — callKey was decrypted.`)
+            console.log(res.callKeyHex
+                ? `   Signaling (accept/preaccept) DID work — callKey was decrypted.`
+                : `   ⚠️  callKey is MISSING — check the [MOD] decryptCallKey logs above.`)
         }
     } catch (e) {
         console.error('[ACCEPT ERROR]', e.message)

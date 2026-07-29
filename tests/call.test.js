@@ -53,6 +53,7 @@ function makeSock({ decryptOk = true } = {}) {
     const sent = []
     const ws = new EventEmitter()
     ws.isOpen = true
+    const stats = { decrypts: 0 }
 
     const ev = new EventEmitter()
     ev.buffer = () => {}
@@ -75,6 +76,7 @@ function makeSock({ decryptOk = true } = {}) {
         messageMutex: {}, notificationMutex: {}, receiptMutex: {},
         signalRepository: {
             decryptMessage: async ({ jid }) => {
+                stats.decrypts++
                 if (decryptOk && jid.startsWith('15559998888')) return plaintext
                 throw new Error('no session for ' + jid)
             },
@@ -86,6 +88,7 @@ function makeSock({ decryptOk = true } = {}) {
                 getPNForLID: async () => undefined
             }
         },
+        generateMessageTag: () => 'TESTMESSAGETAG',
         query: async n => { sent.push(n); return { tag: 'call', attrs: {} } },
         sendNode: async n => { sent.push(n) },
         upsertMessage: async () => {},
@@ -110,7 +113,7 @@ function makeSock({ decryptOk = true } = {}) {
         logger: silentLogger,
         getMessage: async () => undefined
     })
-    return { sock, ws, sent }
+    return { sock, ws, sent, stats }
 }
 
 /** A realistic incoming-call stanza, shaped like the real wire format. */
@@ -285,6 +288,75 @@ describe('incoming call -> event -> accept', () => {
         const res = await sock.acceptCall(CALL_ID, CALLER)
         expect(res.callKey).toBeNull()
         expect(sent.some(s => s.content?.[0]?.tag === 'accept')).toBe(true)
+    })
+
+    // Regression for the live-capture bug: WhatsApp retransmitted the offer,
+    // the 2nd Signal decrypt failed with MessageCounterError ("Key used
+    // already or never filled") and the keyless duplicate overwrote the
+    // cached key -> acceptCall logged "no media callKey available", the demo
+    // auto-answered twice, and ICE failed with "Missing media callKey".
+    test('retransmitted offers: one event, one Signal decrypt, key survives', async () => {
+        const { sock, ws, stats } = makeSock()
+        const events = []
+        sock.ev.on('call', calls => events.push(...calls))
+
+        ws.emit('CB:call', offerStanza())
+        await settle()
+        const duplicate = offerStanza()
+        duplicate.attrs.id = 'stanza-1-retry'
+        ws.emit('CB:call', duplicate)
+        await settle()
+
+        // exactly one offer event -> no double auto-answer / double accept
+        const offers = events.filter(e => e.status === 'offer')
+        expect(offers).toHaveLength(1)
+        expect(offers[0].callKeyHex).toBe(REAL_KEY.toString('hex'))
+
+        // the duplicate must NOT re-consume the Signal ratchet
+        expect(stats.decrypts).toBe(1)
+
+        // and acceptCall must still have the real key afterwards
+        const res = await sock.acceptCall(CALL_ID, CALLER)
+        expect(res.callKeyHex).toBe(REAL_KEY.toString('hex'))
+        expect(stats.decrypts).toBe(1) // late lookup served from the memo
+    })
+
+    test('after terminate, a fresh offer with the same call-id is emitted again', async () => {
+        const { sock, ws } = makeSock()
+        const events = []
+        sock.ev.on('call', calls => events.push(...calls))
+
+        ws.emit('CB:call', offerStanza())
+        await settle()
+        ws.emit('CB:call', {
+            tag: 'call',
+            attrs: { from: CALLER, t: '1', id: 'stanza-4' },
+            content: [{ tag: 'terminate', attrs: { 'call-id': CALL_ID, 'call-creator': CALLER }, content: [] }]
+        })
+        await settle()
+        ws.emit('CB:call', offerStanza())
+        await settle(400) // decrypt of the re-offer is slower after cleanup
+
+        const offers = events.filter(e => e.status === 'offer')
+        expect(offers).toHaveLength(2)
+    })
+})
+
+describe('outgoing calls', () => {
+    test('offerCall caches and returns the minted media key', async () => {
+        const { sock } = makeSock()
+
+        const res = await sock.offerCall(CALLER, false)
+        expect(res.id).toBeDefined()
+        expect(Buffer.isBuffer(res.callKey)).toBe(true)
+        expect(res.callKeyHex).toBe(res.callKey.toString('hex'))
+
+        // previously: "No cached offer for callId" / "Missing media callKey"
+        // because the minted key was thrown away after sending the offer.
+        const err = await sock.connectCall(res.id, CALLER, undefined, { iceTimeoutMs: 300 })
+            .then(() => null, e => e)
+        expect(err).toBeTruthy()
+        expect(err.message).not.toMatch(/No cached offer|Missing media callKey/)
     })
 })
 
