@@ -1165,7 +1165,13 @@ export interface WASocket {
     /* messages — receive + [MOD] calls (lib/Socket/messages-recv) */
     sendMessageAck(...args: any[]): Promise<void>
     sendRetryRequest(node: BinaryNode, forceIncludeKeys?: boolean): Promise<void>
-    offerCall(toJid: string, isVideo?: boolean): Promise<{ id: string; to: string }>
+    offerCall(toJid: string, isVideo?: boolean): Promise<{
+        id: string
+        to: string
+        /** the 32-byte media key minted by us for this outgoing call */
+        callKey: Buffer
+        callKeyHex: string
+    }>
     rejectCall(callId: string, callFrom: string): Promise<void>
     /**
      * [MOD] answer an incoming call.

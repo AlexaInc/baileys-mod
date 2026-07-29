@@ -56,6 +56,26 @@ The same key is attached to the `call` event and is carried onto **every**
 subsequent event for that call (`ringing`, `preaccept`, `accept`, `transport`),
 so you can read `call.callKeyHex` at any point in the call's lifetime.
 
+### Duplicate offer stanzas are de-duplicated for you
+
+WhatsApp retransmits the `<offer>` stanza (duplicate delivery, offline + live
+copies). Since the offer's `<enc>` ciphertext can be consumed by the Signal
+ratchet **exactly once**, a second decrypt attempt throws `MessageCounterError
+("Key used already or never filled")`. The library therefore:
+
+- decrypts the media key **once per call-id** and memoizes it (offer handling,
+  `acceptCall()` late-decrypt and `connectCall()` all share the result);
+- **merges** retransmissions into the cached offer — a keyless duplicate can
+  never overwrite the recovered key;
+- emits the `offer` event **only for the first copy**. Retransmitted offers are
+  still acked (which stops the server redelivering) but never reach your
+  listener, so your answer logic cannot fire twice and send duplicate
+  `<preaccept>`/`<accept>` stanzas.
+
+For outgoing calls, `offerCall()` keeps the media key **you** minted in the
+same cache, so `connectCall()` works on outgoing calls too — and the key is
+also returned directly: `const { id, callKeyHex } = await sock.offerCall(jid)`.
+
 ### `acceptCall(callId, callFrom, opts?)`
 
 | Option | Default | Meaning |
