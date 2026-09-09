@@ -257,10 +257,10 @@ async function start() {
 // ─── answer helper ────────────────────────────────────────────────────────────
 async function answerCall(sock, call) {
     try {
-        console.log(`\n[ACCEPT] Sending preaccept + accept for ${call.id}`)
+        console.log(`\n[ACCEPT] Arming accept for ${call.id} (real clients send it after the caller's first mute_v2)`)
         const res = await sock.acceptCall(call.id, call.chatId || call.from)
 
-        console.log(`✅  acceptCall done`)
+        console.log(`✅  acceptCall armed (deferred to caller's mute_v2; preaccept already sent on offer)`)
         console.log(`   callKey (hex): ${res.callKeyHex || 'null'}`)
         console.log(`   isVideo:       ${res.isVideo}`)
 
@@ -274,9 +274,9 @@ async function answerCall(sock, call) {
                 call.id,
                 call.chatId || call.from,
                 AUDIO_FILE || undefined,   // stream audio file if set
-                { iceTimeoutMs: 8000 }
+                { relayTimeoutMs: 30000 }
             )
-            console.log(`✅  ICE connected — media session open`)
+            console.log(`✅  Relay DataChannel connected — media session open`)
 
             session.on('rtp', ({ from }) => {
                 process.stdout.write('.')  // show incoming RTP without log spam
@@ -294,9 +294,7 @@ async function answerCall(sock, call) {
                 console.log(`   Set CALL_AUDIO=/path/to/file.mp3 to stream audio.`)
             }
         } catch (iceErr) {
-            // ICE failure is expected in NAT-heavy environments without real UDP
-            console.log(`\n⚠️  ICE failed (${iceErr.message})`)
-            console.log(`   This is normal without direct UDP access to WA relay servers.`)
+            console.log(`\n⚠️  media connect failed (${iceErr.message})`)
             console.log(res.callKeyHex
                 ? `   Signaling (accept/preaccept) DID work — callKey was decrypted.`
                 : `   ⚠️  callKey is MISSING — check the [MOD] decryptCallKey logs above.`)
