@@ -146,6 +146,29 @@ console.log(sock.getActiveGroupCalls())
 > the query/parse in `getCallInfo` to match what your WA version returns. The
 > media transport after join is identical to 1:1 calls.
 
+**How group media actually comes up (verified live)**
+
+Group calls use **two different relay blocks**, and mixing them up is fatal:
+
+- The **offer's "announcement" `<relay>` block** (its own relay + `auth_token` +
+  `token` + `key`) is the *web client's ICE credential set*. The joiner's
+  DataChannel/ICE leg connects to that relay (`:3480`) with
+  `ice-ufrag = base64(auth_token)` (or the token) and `ice-pwd = <key>` —
+  verified with live STUN probes (binding SUCCESS) against multiple relays.
+- The **per-leg `<group_update>` relay block** (c01-family relays, 187–193-byte
+  te2 tokens — *too long for a libwebrtc ufrag*, and its `<key>` is NOT a valid
+  ICE MI key) is the *Android allocate-path* credential set
+  (meowcaller `ApplyWithSubscriptions`). It is kept separately
+  (`session.setGroupRelay`) and only used if an allocate error points at one of
+  its relays.
+
+On top of that, a joining client must handle the **rekey duty**: a
+`group_update` whose `group_info` carries `rekey="1"` designates *the joiner* to
+mint the next media epoch — generate a fresh 32-byte key, Signal-encrypt it as
+`<enc_rekey>` to every connected participant device, and install it locally.
+Ignoring it leaves the call unkeyed and the creator tears it down ~1 min in.
+
+
 ### `WACallMediaSession` events & methods
 
 ```js

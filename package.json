@@ -49,6 +49,7 @@
     "audio-decode": "^2.2.2",
     "cache-manager": "^5.7.6",
     "fflate": "^0.8.2",
+    "lamejs": "^1.2.1",
     "lodash": "^4.17.21",
     "lru-cache": "^11.1.0",
     "music-metadata": "^7.12.3",

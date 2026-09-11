@@ -127,7 +127,7 @@ check('eager preaccept sent', !!preaccept)
 if (preaccept) {
     const kids = preaccept.node.content[0].content.map((c) => c.tag)
     check('preaccept child order [audio, encopt, capability]', JSON.stringify(kids) === JSON.stringify(['audio', 'encopt', 'capability']), kids)
-    check('preaccept capability blob', Buffer.from(preaccept.node.content[0].content[2].content).toString('hex') === '0105f709e0bb07')
+    check('preaccept capability blob (standard-opus, MLow cleared)', Buffer.from(preaccept.node.content[0].content[2].content).toString('hex') === '0105f709e03b07')
     check('preaccept single rate 16000', preaccept.node.content[0].content[0].attrs.rate === '16000')
 }
 
@@ -172,11 +172,11 @@ if (accept) {
     const a = accept.node.content[0]
     check('accept attrs: call-id + call-creator only', a.attrs['call-id'] === callId && a.attrs['call-creator'] === '222222222222222:3@lid' && a.attrs.count === undefined, a.attrs)
     const kids = a.content.map((c) => c.tag)
-    check('accept child order [audio, net, encopt, metadata]', JSON.stringify(kids) === JSON.stringify(['audio', 'net', 'encopt', 'metadata']), kids)
+    check('accept child order [audio, net, encopt, capability] (no relay — it gets dropped)', JSON.stringify(kids) === JSON.stringify(['audio', 'net', 'encopt', 'capability']), kids)
     check('accept net medium 2 child', a.content[1].attrs.medium === '2')
-    check('accept metadata attr', a.content[3].attrs.peer_abtest_bucket_id_list === '125208,94276', a.content[3].attrs)
+    check('accept capability blob (standard-opus, MLow cleared)', Buffer.from(a.content[3].content).toString('hex') === '0105f709e03b13')
     check('accept single rate 16000', a.content[0].attrs.rate === '16000')
-    check('accept has NO rekey enc', !kids.includes('enc'))
+    check('accept has NO rekey enc and NO voip_settings', !kids.includes('enc') && !kids.includes('voip_settings'))
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -195,7 +195,7 @@ if (offerSent) {
         JSON.stringify(kids) === JSON.stringify(['audio', 'audio', 'net', 'capability', 'enc', 'encopt', 'device-identity']), kids)
     check('offer rates 8000+16000', o.content[0].attrs.rate === '8000' && o.content[1].attrs.rate === '16000')
     check('offer net medium 3', o.content[2].attrs.medium === '3')
-    check('offer capability blob', Buffer.from(o.content[3].content).toString('hex') === '0105f709e0bb13')
+    check('offer capability blob', Buffer.from(o.content[3].content).toString('hex') === '0105f709e03b13')
     check('offer encopt keygen 2', o.content[5].attrs.keygen === '2')
     check('offer device-identity present', o.content[6].tag === 'device-identity')
     check('offer call-id = returned id', o.attrs['call-id'] === offered.id)

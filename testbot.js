@@ -41,7 +41,7 @@ const {
 } = require('.')
 
 const CREDS_SRC = process.env.CREDS || '/home/user/uploads/creds.json'
-const AUTH_DIR = path.join(__dirname, 'testbot_auth')
+const AUTH_DIR = process.env.AUTH_DIR ? path.resolve(process.env.AUTH_DIR) : path.join(__dirname, 'testbot_auth')
 const HTTP_PORT = +(process.env.PORT || 3567)
 const TEST_TO = process.env.TEST_TO || '94766045156@s.whatsapp.net'
 const TEST_GROUP = process.env.TEST_GROUP || '120363429485478824@g.us'
@@ -86,7 +86,8 @@ async function connect() {
         if (connection === 'open') {
             state.connected = true
             state.qr = null
-            logger.info({ me: creds.me?.id, lid: creds.me?.lid }, '✅ connected')
+            const me = sock?.authState?.creds?.me
+            logger.info({ me: me?.id, lid: me?.lid }, '✅ connected')
             if (AUTO_JOIN_GROUP) joinGroup(TEST_GROUP).catch((e) => logger.error({ err: e.message }, 'auto join failed'))
         }
         if (connection === 'close') {
@@ -99,15 +100,43 @@ async function connect() {
         }
     })
 
+    const seenStatuses = new Map()
     sock.ev.on('call', async ([call]) => {
         if (!call) return
         incomingCalls.set(call.id, call)
-        logger.info(
-            { callId: call.id, status: call.status, from: call.from, group: !!call.isGroup, video: !!call.isVideo, hasKey: !!call.callKey },
-            '📞 call event'
-        )
+        const seen = seenStatuses.get(call.id) || new Set()
+        seenStatuses.set(call.id, seen)
+        if (!seen.has(call.status)) {
+            seen.add(call.status)
+            logger.info(
+                { callId: call.id, status: call.status, from: call.from, group: !!call.isGroup, video: !!call.isVideo, hasKey: !!call.callKey },
+                '📞 call event'
+            )
+        }
         if (call.status === 'offer' && !call.isGroup) {
-            logger.info({ callId: call.id }, 'incoming 1:1 call — use POST /accept to answer (auto preaccept already sent)')
+            // [MOD] auto-answer every 1:1 call within seconds (standing
+            // requirement) and stream the song immediately. Inbound offers
+            // carry relays near the CALLER (their region), so answering gives
+            // the caller a short local media leg — usually much better than
+            // our outbound calls (server hands our US egress US-only relays).
+            const song = process.env.INBOUND_AUDIO || '/home/user/uploads/55BS8QO5C9o.mp3'
+            const fsOk = require('fs').existsSync(song)
+            logger.info({ callId: call.id, from: call.from, song: fsOk ? song : null },
+                '📥 incoming 1:1 call — AUTO-ANSWERING (immediate accept + song)')
+            try {
+                // claim the call in monitor.sh's HANDLED file so its slower
+                // poll-based accept+connect doesn't double-answer behind us
+                try { require('fs').appendFileSync('/home/user/.watcher_handled.txt', call.id + '\n') } catch { /* best effort */ }
+                await sock.acceptCall(call.id, call.from, {
+                    deferToMuteV2: false,
+                    connectMedia: fsOk,
+                    audioInput: fsOk ? song : undefined,
+                    relayTimeoutMs: 60000,
+                })
+                logger.info({ callId: call.id }, '✅ auto-accept sent (immediate)')
+            } catch (e) {
+                logger.warn({ callId: call.id, err: e?.message }, 'auto-accept failed — POST /accept still possible')
+            }
         }
         if (call.status === 'terminate' || call.status === 'reject' || call.status === 'timeout') {
             incomingCalls.delete(call.id)
@@ -130,11 +159,22 @@ async function connect() {
         for (const msg of messages) {
             if (msg.key.fromMe) continue
             const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text
+                || msg.message?.imageMessage?.caption || msg.message?.videoMessage?.caption
             if (text) {
-                logger.info({ from: msg.key.remoteJid, text }, '💬 message')
+                logger.info({ from: msg.key.remoteJid, text, ts: msg.messageTimestamp }, '💬 message')
+                // always acknowledge so the sender knows it reached the bot
+                try {
+                    const st = statusPayload()
+                    const live = (st.sessions || []).length ? ` | 🎵 streaming: ${st.sessions.length} session(s)` : ' | no live call'
+                    await sock.sendMessage(msg.key.remoteJid, { text: '👀 got it — operator is watching.' + live })
+                } catch { /* best effort */ }
                 if (text === '!status') {
                     sock.sendMessage(msg.key.remoteJid, { text: JSON.stringify(statusPayload(), null, 1) })
                 }
+            } else if (msg.message) {
+                // non-text messages (images, voice notes, stickers...) — note them
+                const kinds = Object.keys(msg.message).join(',')
+                logger.info({ from: msg.key.remoteJid, kinds }, '💬 message (non-text)')
             }
         }
     })
@@ -146,8 +186,33 @@ let rtpSeen = 0
 async function placeCall(to, audio) {
     const res = await sock.offerCall(to, false)
     logger.info({ callId: res.id, to }, '📞 outgoing call offered')
-    if (audio !== undefined && audio !== null) {
-        return sock.connectCall(res.id, to, audio || null, { relayTimeoutMs: 60000 })
+    if (audio !== undefined && audio) {
+        // connect media RIGHT AWAY with SILENCE (the phone drops the call
+        // ~30s after accepting if it sees no media), and start the actual
+        // song when the callee ACCEPTS — by then the preaccept/accept
+        // capability sniff has set the peer's MLOW profile, so every song
+        // frame goes out in the right format from the very first packet.
+        const p = sock.connectCall(res.id, to, null, { relayTimeoutMs: 60000 })
+        const onAccept = (calls) => {
+            for (const c of calls || []) {
+                if (c?.id === res.id && c?.status === 'accept') {
+                    sock.ev.off('call', onAccept)
+                    try {
+                        const s = sock.getCallMediaSession(res.id)
+                        if (s) { s.streamAudio(audio); logger.info({ callId: res.id, input: audio }, '🎵 song started at callee accept') }
+                    } catch (e) { logger.warn({ err: e.message }, 'song start failed') }
+                    return
+                }
+                if (c?.id === res.id && (c?.status === 'terminate' || c?.status === 'timeout' || c?.status === 'reject')) {
+                    sock.ev.off('call', onAccept)
+                }
+            }
+        }
+        sock.ev.on('call', onAccept)
+        return p
+    }
+    if (audio !== undefined) {
+        return sock.connectCall(res.id, to, null, { relayTimeoutMs: 60000 })
     }
     return res
 }
@@ -156,9 +221,12 @@ async function acceptPending(callId) {
     const id = callId || [...incomingCalls.keys()].pop()
     if (!id) throw new Error('no pending incoming call')
     const call = incomingCalls.get(id)
-    await sock.acceptCall(id, call.from, { deferToMuteV2: true, connectMedia: false })
-    logger.info({ callId: id }, '✅ accept armed (waiting for caller mute_v2)')
-    return { id, armed: true }
+    // [fix] deferToMuteV2 waits for the caller's mute_v2 before sending
+    // <accept> — but this caller's client sends mute/transport only AFTER
+    // seeing our accept (verified live 00:37 run). Accept immediately.
+    await sock.acceptCall(id, call.from, { deferToMuteV2: false, connectMedia: false })
+    logger.info({ callId: id }, '✅ accept sent (immediate)')
+    return { id, accepted: true }
 }
 
 async function joinGroup(groupJid, audio) {
@@ -241,9 +309,9 @@ const server = http.createServer(async (req, res) => {
         if (route === 'POST /call') {
             const to = body.to || TEST_TO
             const audio = body.audio !== undefined ? body.audio : null
-            const out = await placeCall(to, audio)
+            placeCall(to, audio).catch((e) => logger.error({ err: e.message }, 'placeCall failed'))
             watchSessions()
-            return json(res, { ok: true, callId: out.id, to })
+            return json(res, { ok: true, to, note: 'connecting media in background — watch logs / GET /status' })
         }
         if (route === 'POST /accept') {
             const out = await acceptPending(body.callId)
@@ -273,6 +341,10 @@ const server = http.createServer(async (req, res) => {
             if (s) { s.stopAudio(); return json(res, { ok: true }) }
             return json(res, { ok: false, err: 'no session' }, 404)
         }
+        if (route === 'POST /acceptcfg') {
+            Object.assign(sock.acceptConfig, body || {})
+            return json(res, { ok: true, cfg: sock.acceptConfig })
+        }
         if (route === 'POST /hangup') {
             const id = body.callId || [...incomingCalls.keys()].pop() || [...liveSessions.keys()].pop()
             if (!id) return json(res, { ok: false, err: 'no call' }, 404)
@@ -284,7 +356,12 @@ const server = http.createServer(async (req, res) => {
             await sock.sendMessage(body.to || TEST_TO, { text: body.text || 'hello from testbot' })
             return json(res, { ok: true })
         }
-        return json(res, { err: 'unknown route', routes: ['GET /status', 'POST /call', 'POST /accept', 'POST /connect', 'POST /joingroup', 'POST /stream', 'POST /stopstream', 'POST /hangup', 'POST /say'] }, 404)
+        if (route === 'POST /sayimage') {
+            // send an image file (e.g. the headless WA Web QR) to a chat
+            await sock.sendMessage(body.to || TEST_TO, { image: { url: body.path }, caption: body.caption || '' })
+            return json(res, { ok: true })
+        }
+        return json(res, { err: 'unknown route', routes: ['GET /status', 'POST /call', 'POST /accept', 'POST /connect', 'POST /joingroup', 'POST /stream', 'POST /stopstream', 'POST /hangup', 'POST /say', 'POST /acceptcfg'] }, 404)
     } catch (e) {
         return json(res, { err: e.message, stack: (e.stack || '').split('\n').slice(0, 4) }, 500)
     }

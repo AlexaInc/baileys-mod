@@ -43,7 +43,7 @@ async function main() {
     const pkt2 = alice.protectAudio(speechFrame)
     check('protected packet sizes (35B speech → 16+35+4)', pkt1.length === 16 + 35 + 4 && pkt2.length === 16 + 35 + 4, [pkt1.length, pkt2.length])
     check('seq advances (1,2)', pkt1.readUInt16BE(2) === 1 && pkt2.readUInt16BE(2) === 2)
-    check('ts advances 960', pkt2.readUInt32BE(4) === 960)
+    check('ts advances 960 (60ms packet)', pkt2.readUInt32BE(4) === 960)
     check('marker latches on first speech', (pkt1[1] & 0x80) !== 0 && (pkt2[1] & 0x80) === 0)
     check('PT 120', (pkt1[1] & 0x7f) === 120)
     check('ssrc in packet', pkt1.readUInt32BE(8) === alice.ssrc)
@@ -120,19 +120,75 @@ async function main() {
     check('SRTCP protected: +4 index +10 tag', protectedRtcp.length === sr.length + sdes.length + 4 + 10)
 
     // ── Ogg demuxer with real ffmpeg silence ──
-    const ff = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'anullsrc=r=16000:cl=mono', '-t', '2', '-c:a', 'libopus', '-b:a', '24k', '-ar', '16000', '-ac', '1', '-application', 'voip', '-frame_duration', '60', '-f', 'ogg', 'pipe:1'], { stdio: ['ignore', 'pipe', 'inherit'] })
+    const ff = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'anullsrc=r=16000:cl=mono', '-t', '2', '-c:a', 'libopus', '-b:a', '24k', '-ar', '16000', '-ac', '1', '-application', 'lowdelay', '-frame_duration', '20', '-f', 'ogg', 'pipe:1'], { stdio: ['ignore', 'pipe', 'inherit'] })
     const demuxer = new cm.OggOpusDemuxer()
     const frames = []
     await new Promise((resolve) => {
         ff.stdout.on('data', (c) => { for (const f of demuxer.push(c)) frames.push(f) })
         ff.on('close', resolve)
     })
-    const expected = 2000 / 60 // ~33 frames in 2s
-    check('ffmpeg silence → ~33 opus frames of 60ms', frames.length >= 30 && frames.length <= 40, frames.length)
-    check('silence frames are compact (≤40B @24k)', frames.every((f) => f.length > 0 && f.length <= 40), frames.slice(0, 3).map((f) => f.length))
+    const expected = 2000 / 20 // ~100 frames in 2s
+    check('ffmpeg silence → ~100 opus frames of 20ms', frames.length >= 90 && frames.length <= 110, frames.length)
+    check('silence frames are compact (≤80B @24k 20ms CELT)', frames.every((f) => f.length > 0 && f.length <= 80), frames.slice(0, 3).map((f) => f.length))
+    // MLOW escape sanity: 20ms CELT WB mono = config 31 → escape TOC 0xFC
+    {
+        let esc = 0, dtx90 = 0
+        for (const f of frames) {
+            const e = cm.mlowEscapeOpus?.(f)
+            if (e) { if (e.length === 1 && e[0] === 0x90) dtx90++; else if (e[0] === 0xDC) esc++ }
+        }
+        check('MLOW escape wraps CELT frames (TOC 0xDC = 20ms escape) or SID 0x90', esc + dtx90 === frames.length && esc > 0, { esc, dtx90, total: frames.length })
+        // 60ms multiframe: 3 x 20ms CELT -> [0xbb][0x83][l1][l2][d...] -> escape 0xdd
+        const g = frames.slice(0, 3)
+        const mf = cm.buildOpusMultiframe(g)
+        const okMf = mf && mf[0] === 0xbb && mf[1] === 0x83 && cm.mlowEscapeOpus(mf)[0] === 0xdd
+        check('3x20ms -> 60ms multiframe (0xbb/0x83) escapes to 0xdd', !!okMf, mf && mf.toString('hex').slice(0, 20))
+        // anti-nesting: code-3 (already-multiframe) inputs MUST be rejected —
+        // wrapping a multiframe again puts nested garbage on the wire
+        check('builder rejects code-3 (already multiframe) inputs', cm.buildOpusMultiframe([mf, mf, mf]) === null)
+        // single usable frame in a group → null (never emit a bare 20 ms single)
+        check('builder rejects single-usable group', cm.buildOpusMultiframe([g[0], Buffer.from([0xb8, 0x00]), Buffer.from([0xb8, 0x00])]) === null)
+    }
+
+    // ── PRODUCTION encoder defaults must yield 20 ms code-0 singles ──
+    // (regression: frameDuration was once tied to the 60 ms wire cadence,
+    // making ffmpeg emit its own 60 ms multiframes → nested wire garbage)
+    {
+        const q = cm.DEFAULT_AUDIO_QUALITY
+        const ff2 = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'anullsrc=r=16000:cl=mono', '-t', '2', '-vn', '-c:a', q.codec, '-b:a', String(q.bitrate), '-ar', String(q.sampleRate), '-ac', String(q.channels), '-application', q.application, '-frame_duration', String(q.frameDuration), '-f', 'ogg', 'pipe:1'], { stdio: ['ignore', 'pipe', 'inherit'] })
+        const dem2 = new cm.OggOpusDemuxer()
+        const frames2 = []
+        await new Promise((resolve) => {
+            ff2.stdout.on('data', (c) => { for (const f of dem2.push(c)) frames2.push(f) })
+            ff2.on('close', resolve)
+        })
+        check('production defaults: ~33 frames in 2s (60ms SILK singles)', frames2.length >= 30 && frames2.length <= 37, { n: frames2.length, frameDuration: q.frameDuration })
+        check('production defaults: all frames are code-0 SILK singles (config 11 = TOC 0x58)', frames2.length > 0 && frames2.every((f) => (f[0] & 3) === 0 && (f[0] >> 3) === 11), frames2[0] && frames2[0][0].toString(16))
+        check('production defaults: SILK frames are NOT MLow-escapable (config<16 → null)', frames2.every((f) => cm.mlowEscapeOpus(f) === null))
+        check('production defaults: FRAMES_PER_PACKET=1 (frame == wire packet)', cm.FRAMES_PER_PACKET === 1 && q.frameDuration === 60 && q.application === 'voip')
+    }
     check('no OpusHead leaked', frames.every((f) => f.subarray(0, 8).toString('latin1') !== 'OpusHead'))
 
-    console.log(`\n${pass} passed, ${fail} failed`)
+    
+    // ── ROLE-AWARE participant ids (2026-09-10 packet-proven rule) ──
+    // caller keys/SSRCs = <base>:0@lid; answerer = its real device jid
+    {
+        const k = Buffer.alloc(32, 9)
+        const usCaller   = new cm.WACallMediaSession({ callId: 'R1', callKey: k, selfLid: '278043985768659:1@lid', peerLid: '78151912841263:30@lid', inbound: false })
+        const usAnswerer = new cm.WACallMediaSession({ callId: 'R2', callKey: k, selfLid: '278043985768659:1@lid', peerLid: '78151912841263:30@lid', inbound: true })
+        check('caller selfParticipantId keeps device (matches announced call-creator)', usCaller.selfParticipantId === '278043985768659:1@lid', usCaller.selfParticipantId)
+        check('answerer selfParticipantId keeps device', usAnswerer.selfParticipantId === '278043985768659:1@lid', usAnswerer.selfParticipantId)
+        check('caller vs answerer SSRCs differ', usCaller.ssrc !== usAnswerer.ssrc)
+        const themAnswerer = new cm.WACallMediaSession({ callId: 'R1', callKey: k, selfLid: '78151912841263:30@lid', peerLid: '278043985768659:1@lid', inbound: true })
+        usCaller.noteAnsweringParticipant('78151912841263:30@lid')
+        check('caller recv rekeyed to answering device', usCaller._recvCandidates[0] === '78151912841263:30@lid', usCaller._recvCandidates)
+        check('caller recv[:device] == answerer send key', usCaller.recvKeys.authKey.equals(themAnswerer.sendKeys.authKey))
+        const themCaller = new cm.WACallMediaSession({ callId: 'R3', callKey: k, selfLid: '78151912841263:30@lid', peerLid: '278043985768659:1@lid', inbound: false })
+        check('caller keys = its announced creator form', themCaller.selfParticipantId === '78151912841263:30@lid')
+        // answerer recv must still cover the caller :0 form
+        check('answerer recv candidates include caller :0', themAnswerer._recvCandidates.includes('278043985768659:0@lid'))
+    }
+console.log(`\n${pass} passed, ${fail} failed`)
     process.exit(fail ? 1 : 0)
 }
 main().catch((e) => { console.error(e); process.exit(1) })
